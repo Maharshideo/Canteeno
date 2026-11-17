@@ -2,6 +2,9 @@ import { Response } from "express";
 import { prisma } from "../config/database.js";
 import { AuthenticatedRequest } from "../types/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { calculateHistoricalETA } from "../utils/historicalETA.js";
+import { formatFoodItem } from "../utils/foodFormatter.js";
+import { canteenWhere } from "../utils/prismaHelpers.js";
 
 export const getCanteens = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -30,9 +33,7 @@ export const getCanteenById = async (req: AuthenticatedRequest, res: Response): 
 
     // Support lookup by MongoDB ObjectId or short code (e.g. "nescafe", "annapurna")
     const canteen = await prisma.canteen.findFirst({
-      where: {
-        OR: [{ id }, { code: id }],
-      },
+      where: canteenWhere(id),
     });
 
     if (!canteen) {
@@ -51,9 +52,7 @@ export const getCanteenMenu = async (req: AuthenticatedRequest, res: Response): 
     const id = String(req.params.id);
 
     const canteen = await prisma.canteen.findFirst({
-      where: {
-        OR: [{ id }, { code: id }],
-      },
+      where: canteenWhere(id),
     });
 
     if (!canteen) {
@@ -72,8 +71,39 @@ export const getCanteenMenu = async (req: AuthenticatedRequest, res: Response): 
       orderBy: [{ popular: "desc" }, { name: "asc" }],
     });
 
-    sendSuccess(res, foods);
+    sendSuccess(res, foods.map(formatFoodItem));
   } catch (err: any) {
     sendError(res, err.message || "Failed to fetch menu", 500);
+  }
+};
+
+/**
+ * GET /api/canteens/:id/eta
+ * Public endpoint – returns a smart estimated wait time for a new order
+ * at the specified canteen, based on:
+ *   • Historical average prep time (placed → ready) of recent COLLECTED orders
+ *   • Current queue length (PENDING + ACCEPTED + PREPARING orders)
+ *
+ * The estimate is an approximation. It must NOT be presented as a guarantee.
+ */
+export const getCanteenETA = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const id = String(req.params.id);
+
+    // Resolve by ObjectId OR canteen code
+    const canteen = await prisma.canteen.findFirst({
+      where: canteenWhere(id),
+      select: { id: true, name: true, prepTime: true },
+    });
+
+    if (!canteen) {
+      sendError(res, "Canteen not found", 404);
+      return;
+    }
+
+    const eta = await calculateHistoricalETA(canteen.id);
+    sendSuccess(res, { canteenId: canteen.id, canteenName: canteen.name, ...eta });
+  } catch (err: any) {
+    sendError(res, err.message || "Failed to calculate ETA", 500);
   }
 };

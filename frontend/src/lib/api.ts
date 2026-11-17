@@ -102,10 +102,25 @@ export const authApi = {
 };
 
 // ----------------- Canteens API -----------------
+export interface CanteenETA {
+  canteenId: string;
+  canteenName: string;
+  estimatedMinutes: number;
+  historicalAvgMinutes: number;
+  queueLength: number;
+  queuePenaltyMinutes: number;
+  sampleSize: number;
+  confidence: "high" | "medium" | "low" | "none";
+  windowDays: number;
+  note: string;
+}
+
 export const canteensApi = {
   getAll: (openOnly = false) => request<Canteen[]>(`/canteens${openOnly ? "?openOnly=true" : ""}`),
   getById: (id: string) => request<Canteen>(`/canteens/${id}`),
   getMenu: (id: string) => request<FoodItem[]>(`/canteens/${id}/menu`),
+  /** Dynamic estimated wait time based on historical orders + live queue at this canteen */
+  getETA: (id: string) => request<CanteenETA>(`/canteens/${id}/eta`),
 };
 
 // ----------------- Food API -----------------

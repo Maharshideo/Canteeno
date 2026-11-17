@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { ArrowLeft, Clock, Heart, MapPin, Phone, Search, ShoppingBag, UtensilsCrossed } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { ArrowLeft, Clock, Heart, MapPin, Phone, Search, ShoppingBag, UtensilsCrossed, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useApp, useCurrentStudent, useHydrated } from "@/store/app-store";
 import { seedCanteens } from "@/data/seed";
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { cartSubtotal, formatPrice } from "@/lib/order-logic";
+import { canteensApi, type CanteenETA } from "@/lib/api";
 
 export const Route = createFileRoute("/_student/canteens/$canteenId")({
   loader: ({ params }) => {
@@ -46,7 +47,7 @@ export const Route = createFileRoute("/_student/canteens/$canteenId")({
 function CanteenPage() {
   const { canteenId } = Route.useParams();
   const hydrated = useHydrated();
-  const canteen = useApp((s) => s.canteens.find((c) => c.id === canteenId));
+  const canteen = useApp((s) => s.canteens.find((c) => c.id === canteenId || c.code === canteenId));
   const allFoods = useApp((s) => s.foods);
   const reviewsAll = useApp((s) => s.reviews);
   const cart = useApp((s) => s.cart);
@@ -55,8 +56,30 @@ function CanteenPage() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(null);
   const [vegOnly, setVegOnly] = useState(false);
+  const [eta, setEta] = useState<CanteenETA | null>(null);
+  const [etaLoading, setEtaLoading] = useState(false);
 
-  const foods = useMemo(() => allFoods.filter((f) => f.canteenId === canteenId && f.available), [allFoods, canteenId]);
+  // Fetch live ETA from backend when canteen is known
+  useEffect(() => {
+    if (!canteen) return;
+    setEtaLoading(true);
+    canteensApi.getETA(canteen.id).then((r) => {
+      if (r.success && r.data) setEta(r.data);
+      setEtaLoading(false);
+    }).catch(() => setEtaLoading(false));
+  }, [canteen?.id]);
+
+  const targetCanteenId = canteen?.id ?? canteenId;
+  const targetCanteenCode = canteen?.code;
+  const foods = useMemo(
+    () =>
+      allFoods.filter(
+        (f) =>
+          (f.canteenId === targetCanteenId || f.canteenId === targetCanteenCode || f.canteenId === canteenId) &&
+          (f.available ?? f.isAvailable ?? true),
+      ),
+    [allFoods, targetCanteenId, targetCanteenCode, canteenId],
+  );
   const catIds = useMemo(() => [...new Set(foods.map((f) => f.categoryId))], [foods]);
   const categories = useApp((s) => s.categories);
   const filtered = foods.filter(
@@ -65,7 +88,9 @@ function CanteenPage() {
   const grouped = catIds
     .map((id) => ({ cat: categories.find((c) => c.id === id), items: filtered.filter((f) => f.categoryId === id) }))
     .filter((g) => g.items.length && g.cat?.active !== false);
-  const reviews = reviewsAll.filter((r) => r.canteenId === canteenId && r.status === "published").slice(0, 4);
+  const reviews = reviewsAll.filter(
+    (r) => (r.canteenId === targetCanteenId || r.canteenId === targetCanteenCode || r.canteenId === canteenId) && r.status === "published",
+  ).slice(0, 4);
 
   if (!canteen) {
     if (!hydrated) return <div className="container-app py-16"><div className="h-72 animate-pulse rounded-3xl bg-muted" /></div>;
@@ -73,7 +98,7 @@ function CanteenPage() {
   }
 
   const fav = !!user?.favouriteCanteens.includes(canteen.id);
-  const cartHere = cart.canteenId === canteen.id && cart.items.length > 0;
+  const cartHere = (cart.canteenId === canteen.id || cart.canteenId === canteen.code) && cart.items.length > 0;
   const cartCount = cart.items.reduce((n, l) => n + l.qty, 0);
   const today = canteen.openingHours[(new Date().getDay() + 6) % 7];
 
@@ -118,6 +143,10 @@ function CanteenPage() {
             <span className="inline-flex items-center gap-1"><Clock className="size-4" /> ~{canteen.prepTime} min avg prep</span>
             <span className="inline-flex items-center gap-1"><MapPin className="size-4" /> {canteen.location}</span>
           </div>
+
+          {/* ── Live ETA Widget ── */}
+          <ETAWidget eta={eta} loading={etaLoading} />
+
           <p className="mt-3 max-w-2xl text-muted-foreground">{canteen.description}</p>
 
           {!(canteen.isOpen && canteen.acceptingOrders) && (
@@ -207,6 +236,73 @@ function CanteenPage() {
           <DemoNotice>Menu items, prices and ratings are sample data for this prototype.</DemoNotice>
         </aside>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ETAWidget — shows the smart estimated wait time for this canteen
+// ─────────────────────────────────────────────────────────────────────────────
+const confidenceColors: Record<string, string> = {
+  high: "text-success border-success/30 bg-success/10",
+  medium: "text-warning border-warning/30 bg-warning/10",
+  low: "text-muted-foreground border-border bg-muted/40",
+  none: "text-muted-foreground border-border bg-muted/40",
+};
+
+const confidenceLabels: Record<string, string> = {
+  high: "High confidence",
+  medium: "Medium confidence",
+  low: "Low confidence",
+  none: "No data yet",
+};
+
+function ETAWidget({ eta, loading }: { eta: CanteenETA | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="mt-4 flex items-center gap-3 rounded-2xl border bg-muted/30 px-4 py-3 animate-pulse">
+        <Clock className="size-5 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Calculating live wait time…</span>
+      </div>
+    );
+  }
+
+  if (!eta) return null;
+
+  const colorClass = confidenceColors[eta.confidence] ?? confidenceColors.none;
+  const confidenceLabel = confidenceLabels[eta.confidence] ?? "Unknown";
+
+  return (
+    <div className={cn("mt-4 rounded-2xl border px-4 py-3", colorClass)}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <Clock className="size-4 shrink-0" />
+            Estimated wait time: <span className="text-lg font-bold">~{eta.estimatedMinutes} min</span>
+          </p>
+          <p className="mt-0.5 text-xs opacity-80">{eta.note}</p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1 text-xs opacity-70">
+          {eta.queueLength > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Users className="size-3" /> {eta.queueLength} order{eta.queueLength !== 1 ? "s" : ""} ahead
+            </span>
+          )}
+          {eta.sampleSize > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <TrendingUp className="size-3" /> {confidenceLabel} · {eta.sampleSize} samples
+            </span>
+          )}
+          {eta.sampleSize === 0 && (
+            <span>{confidenceLabel}</span>
+          )}
+        </div>
+      </div>
+      {eta.historicalAvgMinutes > 0 && eta.queuePenaltyMinutes > 0 && (
+        <p className="mt-2 text-xs opacity-60">
+          Breakdown: {eta.historicalAvgMinutes} min avg prep + {eta.queuePenaltyMinutes} min queue wait
+        </p>
+      )}
     </div>
   );
 }

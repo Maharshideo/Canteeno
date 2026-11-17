@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { ArrowLeft, Banknote, Clock, Loader2, MapPin, ShoppingBag, Smartphone, Zap } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { ArrowLeft, Banknote, Clock, Loader2, MapPin, ShoppingBag, Smartphone, TrendingUp, Users, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "@/store/app-store";
 import { cartLines, estimatePrepMinutes, formatPrice } from "@/lib/order-logic";
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { PaymentMethod } from "@/lib/types";
+import { canteensApi, type CanteenETA } from "@/lib/api";
 
 export const Route = createFileRoute("/_student/checkout")({
   head: () => ({
@@ -60,9 +61,19 @@ function Checkout() {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [liveEta, setLiveEta] = useState<CanteenETA | null>(null);
+
+  // Fetch live backend ETA when canteen is known
+  useEffect(() => {
+    if (!canteen?.id) return;
+    canteensApi.getETA(canteen.id).then((r) => {
+      if (r.success && r.data) setLiveEta(r.data);
+    }).catch(() => {}); // silent fail — local estimate still shown
+  }, [canteen?.id]);
 
   const lines = cartLines(cart, foods);
-  const eta = estimatePrepMinutes(lines.map((l) => ({ prepTime: l.food.prepTime, qty: l.qty })), queue);
+  // Use live backend ETA if available, otherwise fall back to client-side estimate
+  const eta = liveEta?.estimatedMinutes ?? estimatePrepMinutes(lines.map((l) => ({ prepTime: l.food.prepTime, qty: l.qty })), queue);
   const slots = useMemo(() => slotOptions(eta), [eta]);
   const subtotal = lines.reduce((a, l) => a + l.total, 0);
 
@@ -125,6 +136,24 @@ function Checkout() {
                 </Label>
               ))}
             </RadioGroup>
+            {/* Live ETA breakdown from backend */}
+            {liveEta && (
+              <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+                <p className="flex items-center gap-2 font-semibold text-primary">
+                  <TrendingUp className="size-4" />
+                  Live queue estimate: ~{liveEta.estimatedMinutes} min
+                </p>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  {liveEta.queueLength > 0 && (
+                    <span className="inline-flex items-center gap-1"><Users className="size-3" /> {liveEta.queueLength} order{liveEta.queueLength !== 1 ? "s" : ""} ahead of you</span>
+                  )}
+                  {liveEta.sampleSize > 0 && (
+                    <span>Based on {liveEta.sampleSize} recent orders · {liveEta.confidence} confidence</span>
+                  )}
+                  {liveEta.sampleSize === 0 && <span>No order history yet — using canteen default</span>}
+                </div>
+              </div>
+            )}
             {when === "later" && (
               <div className="mt-4 max-w-xs">
                 <Label htmlFor="slot" className="mb-1.5 block">Pickup time</Label>
