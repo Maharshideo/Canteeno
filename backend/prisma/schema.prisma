@@ -1,0 +1,190 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  STUDENT
+  CANTEEN_STAFF
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  READY_FOR_PICKUP
+  COLLECTED
+  REJECTED
+  CANCELLED
+}
+
+model User {
+  id                String         @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  email             String         @unique
+  passwordHash      String
+  role              Role           @default(STUDENT)
+  hostel            String?
+  phone             String?
+  rollNo            String?
+  status            String         @default("active") // active, suspended
+  canteenId         String?        // assigned canteen for CANTEEN_STAFF
+  favouriteFoods    String[]       @default([])
+  favouriteCanteens String[]       @default([])
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  orders            Order[]
+  reviews           Review[]
+  notifications     Notification[]
+}
+
+model Canteen {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  code            String      @unique
+  name            String
+  tagline         String?
+  description     String
+  location        String
+  cuisine         String[]    @default([])
+  image           String
+  openingTime     String?     @default("08:00")
+  closingTime     String?     @default("22:00")
+  openingHours    Json?
+  isOpen          Boolean     @default(true)
+  acceptingOrders Boolean     @default(true)
+  featured        Boolean     @default(false)
+  phone           String?
+  prepTime        Int         @default(15) // average minutes
+  rating          Float       @default(4.5)
+  ratingCount     Int         @default(0)
+  staffIds        String[]    @default([])
+  isDemo          Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  foods           FoodItem[]
+  orders          Order[]
+  reviews         Review[]
+}
+
+model Category {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  name      String     @unique
+  slug      String     @unique
+  icon      String     @default("Utensils")
+  image     String?
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  foods     FoodItem[]
+}
+
+model FoodItem {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  description     String
+  price           Float
+  image           String
+  category        String?
+  categoryId      String?     @db.ObjectId
+  categoryRel     Category?   @relation(fields: [categoryId], references: [id])
+  isVeg           Boolean     @default(true)
+  isAvailable     Boolean     @default(true) // visible in student menu
+  inStock         Boolean     @default(true) // available to order
+  popular         Boolean     @default(false)
+  recommended     Boolean     @default(false)
+  rating          Float       @default(4.5)
+  preparationTime Int         @default(10) // minutes
+  canteenId       String      @db.ObjectId
+  canteen         Canteen     @relation(fields: [canteenId], references: [id], onDelete: Cascade)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  orderItems      OrderItem[]
+}
+
+model Order {
+  id                       String         @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber              String         @unique
+  studentId                String         @db.ObjectId
+  student                  User           @relation(fields: [studentId], references: [id])
+  studentName              String
+  canteenId                String         @db.ObjectId
+  canteen                  Canteen        @relation(fields: [canteenId], references: [id])
+  status                   OrderStatus    @default(PENDING)
+  totalAmount              Float
+  subtotal                 Float
+  estimatedPreparationTime Int            @default(15) // minutes
+  pickupSlot               String         @default("asap")
+  note                     String?        @default("")
+  paymentMethod            String         @default("CASH_AT_PICKUP")
+  reason                   String?
+  reviewed                 Boolean        @default(false)
+  history                  Json?          // [{ status, at }]
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+
+  items                    OrderItem[]
+  notifications            Notification[]
+}
+
+model OrderItem {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId    String   @db.ObjectId
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  foodItemId String   @db.ObjectId
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
+  itemName   String
+  quantity   Int
+  unitPrice  Float
+  subtotal   Float
+  isVeg      Boolean  @default(true)
+}
+
+model Review {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String   @db.ObjectId
+  student     User     @relation(fields: [studentId], references: [id])
+  studentName String
+  canteenId   String   @db.ObjectId
+  canteen     Canteen  @relation(fields: [canteenId], references: [id])
+  orderId     String?
+  rating      Int
+  comment     String
+  status      String   @default("published") // published, flagged, hidden
+  reply       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  orderId   String?  @db.ObjectId
+  order     Order?   @relation(fields: [orderId], references: [id])
+  title     String
+  message   String
+  kind      String   @default("order") // order, offer, system
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model PlatformSettings {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  platformName      String   @default("Canteeno")
+  campusName        String   @default("Campus Central")
+  orderingEnabled   Boolean  @default(true)
+  maxActiveOrders   Int      @default(3)
+  pickupHoldMinutes Int      @default(20)
+  supportEmail      String   @default("canteen-support@campus.edu")
+  allowUpi          Boolean  @default(false)
+  updatedAt         DateTime @updatedAt
+}

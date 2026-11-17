@@ -1,0 +1,16 @@
+{
+  "name": "canteeno",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Canteeno - College food ordering and pickup management platform",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "seed": "cd backend && npm run db:seed"
+  },
+  "keywords": ["canteeno", "food-ordering", "college", "pickup", "express", "prisma", "mongodb", "react"],
+  "author": "Maharshideo",
+  "license": "ISC"
+}
