@@ -2,6 +2,8 @@ import { Response } from "express";
 import { prisma } from "../config/database.js";
 import { AuthenticatedRequest } from "../types/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { formatFoodItem } from "../utils/foodFormatter.js";
+import { canteenWhere } from "../utils/prismaHelpers.js";
 
 export const getFoods = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -14,7 +16,7 @@ export const getFoods = async (req: AuthenticatedRequest, res: Response): Promis
     if (canteenId) {
       // Find canteen if passed by code or id
       const canteen = await prisma.canteen.findFirst({
-        where: { OR: [{ id: String(canteenId) }, { code: String(canteenId) }] },
+        where: canteenWhere(String(canteenId)),
       });
       if (canteen) {
         where.canteenId = canteen.id;
@@ -58,7 +60,7 @@ export const getFoods = async (req: AuthenticatedRequest, res: Response): Promis
       orderBy: [{ popular: "desc" }, { name: "asc" }],
     });
 
-    sendSuccess(res, foods);
+    sendSuccess(res, foods.map(formatFoodItem));
   } catch (err: any) {
     sendError(res, err.message || "Failed to fetch food items", 500);
   }
@@ -89,7 +91,7 @@ export const getFoodById = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    sendSuccess(res, food);
+    sendSuccess(res, formatFoodItem(food));
   } catch (err: any) {
     sendError(res, err.message || "Failed to fetch food item", 500);
   }

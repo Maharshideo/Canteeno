@@ -5,6 +5,7 @@ import { calculateEstimatedPrepTime } from "../utils/prepTime.js";
 import { toFrontendStatus, toPrismaStatus } from "../utils/statusMapper.js";
 import { notifyCanteen, notifyOrder, notifyUser } from "./socket.service.js";
 import { createNotification } from "./notification.service.js";
+import { canteenWhere } from "../utils/prismaHelpers.js";
 
 interface CreateOrderItemInput {
   foodId: string;
@@ -92,9 +93,7 @@ export const createOrder = async (input: CreateOrderInput) => {
 
   // 4. Find canteen
   const canteen = await prisma.canteen.findFirst({
-    where: {
-      OR: [{ id: input.canteenId }, { code: input.canteenId }],
-    },
+    where: canteenWhere(input.canteenId),
   });
   if (!canteen) {
     throw new Error("Canteen not found.");

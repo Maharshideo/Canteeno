@@ -2,6 +2,7 @@ import { Response } from "express";
 import { prisma } from "../config/database.js";
 import { AuthenticatedRequest } from "../types/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { canteenWhere } from "../utils/prismaHelpers.js";
 
 export const createReview = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -13,7 +14,7 @@ export const createReview = async (req: AuthenticatedRequest, res: Response): Pr
     const { canteenId, orderId, rating, comment } = req.body;
 
     const canteen = await prisma.canteen.findFirst({
-      where: { OR: [{ id: canteenId }, { code: canteenId }] },
+      where: canteenWhere(canteenId),
     });
 
     if (!canteen) {
@@ -85,7 +86,7 @@ export const getReviews = async (req: AuthenticatedRequest, res: Response): Prom
 
     if (canteenId) {
       const canteen = await prisma.canteen.findFirst({
-        where: { OR: [{ id: String(canteenId) }, { code: String(canteenId) }] },
+        where: canteenWhere(String(canteenId)),
       });
       if (canteen) {
         where.canteenId = canteen.id;

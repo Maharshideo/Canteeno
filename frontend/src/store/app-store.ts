@@ -181,10 +181,27 @@ export const useApp = create<AppState>()(
 
           const patch: Partial<Data> = {};
           if (canteensRes.success && canteensRes.data?.length) {
-            patch.canteens = canteensRes.data.map((c) => ({ ...c, isDemo: true }));
+            patch.canteens = canteensRes.data.map((c: any) => ({
+              ...c,
+              isDemo: true,
+              openingHours: Array.isArray(c.openingHours) && c.openingHours.length > 0 ? c.openingHours : [
+                { day: "Mon", open: c.openingTime || "08:00", close: c.closingTime || "22:00", closed: false },
+                { day: "Tue", open: c.openingTime || "08:00", close: c.closingTime || "22:00", closed: false },
+                { day: "Wed", open: c.openingTime || "08:00", close: c.closingTime || "22:00", closed: false },
+                { day: "Thu", open: c.openingTime || "08:00", close: c.closingTime || "22:00", closed: false },
+                { day: "Fri", open: c.openingTime || "08:00", close: c.closingTime || "22:00", closed: false },
+                { day: "Sat", open: c.openingTime || "08:00", close: c.closingTime || "22:00", closed: false },
+                { day: "Sun", open: c.openingTime || "08:00", close: c.closingTime || "22:00", closed: false },
+              ],
+            }));
           }
           if (foodsRes.success && foodsRes.data?.length) {
-            patch.foods = foodsRes.data;
+            patch.foods = foodsRes.data.map((f: any) => ({
+              ...f,
+              prepTime: f.prepTime ?? f.preparationTime ?? 10,
+              available: f.available ?? f.isAvailable ?? true,
+              inStock: f.inStock !== false,
+            }));
           }
           if (catsRes.success && catsRes.data?.length) {
             patch.categories = catsRes.data;

@@ -3,8 +3,9 @@ import { useApp } from "@/store/app-store";
 /** The canteen the signed-in staff member manages (demo session). */
 export function useStaffCanteen() {
   const id = useApp((s) => s.session.canteenId);
-  const canteen = useApp((s) => s.canteens.find((c) => c.id === id));
-  return canteen!;
+  const canteens = useApp((s) => s.canteens);
+  const found = canteens.find((c) => c.id === id || c.code === id);
+  return found || canteens[0] || ({} as any);
 }
 
 export function isToday(iso: string) {

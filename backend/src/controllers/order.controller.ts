@@ -4,6 +4,7 @@ import { prisma } from "../config/database.js";
 import { AuthenticatedRequest } from "../types/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { createOrder, formatOrderResponse, updateOrderStatus } from "../services/order.service.js";
+import { isObjectId } from "../utils/prismaHelpers.js";
 
 export const placeOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -64,9 +65,7 @@ export const getOrderById = async (req: AuthenticatedRequest, res: Response): Pr
     const id = String(req.params.id);
 
     const order = await prisma.order.findFirst({
-      where: {
-        OR: [{ id }, { orderNumber: id }],
-      },
+      where: isObjectId(id) ? { id } : { orderNumber: id },
       include: {
         items: true,
         canteen: {

@@ -55,7 +55,7 @@ function PriceCell({ food }: { food: FoodItem }) {
 
 function StaffMenu() {
   const canteen = useStaffCanteen();
-  const foods = useApp((s) => s.foods).filter((f) => f.canteenId === canteen.id);
+  const foods = useApp((s) => s.foods).filter((f) => f.canteenId === canteen?.id || f.canteenId === canteen?.code);
   const categories = useApp((s) => s.categories);
   const { patchFood, deleteFood } = useApp.getState();
   const [q, setQ] = useState("");
@@ -68,7 +68,7 @@ function StaffMenu() {
   const list = foods.filter(
     (f) =>
       (cat === "all" || f.categoryId === cat) &&
-      (stock === "all" || (stock === "out" ? !f.inStock : stock === "hidden" ? !f.available : f.inStock)) &&
+      (stock === "all" || (stock === "out" ? !f.inStock : stock === "hidden" ? !(f.available ?? f.isAvailable) : f.inStock)) &&
       (!q.trim() || f.name.toLowerCase().includes(q.trim().toLowerCase())),
   );
 

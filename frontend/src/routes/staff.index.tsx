@@ -23,13 +23,13 @@ function StaffOverview() {
   const patchFood = useApp((s) => s.patchFood);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const orders = allOrders.filter((o) => o.canteenId === canteen.id);
+  const orders = allOrders.filter((o) => o.canteenId === canteen?.id || o.canteenId === canteen?.code);
   const today = orders.filter((o) => isToday(o.placedAt));
   const incoming = orders.filter((o) => o.status === "placed");
   const active = orders.filter((o) => ["accepted", "preparing", "ready"].includes(o.status));
   const revenue = today.filter((o) => o.status === "collected").reduce((a, o) => a + o.total, 0);
-  const avgPrep = active.length ? Math.round(active.reduce((a, o) => a + o.prepMinutes, 0) / active.length) : canteen.prepTime;
-  const outOfStock = allFoods.filter((f) => f.canteenId === canteen.id && !f.inStock);
+  const avgPrep = active.length ? Math.round(active.reduce((a, o) => a + o.prepMinutes, 0) / active.length) : (canteen?.prepTime || 15);
+  const outOfStock = allFoods.filter((f) => (f.canteenId === canteen?.id || f.canteenId === canteen?.code) && !f.inStock);
 
   return (
     <>

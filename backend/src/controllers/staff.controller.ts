@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from "../types/index.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { formatOrderResponse, updateOrderStatus } from "../services/order.service.js";
 import { notifyCanteen } from "../services/socket.service.js";
+import { canteenWhere } from "../utils/prismaHelpers.js";
 
 const getStaffCanteenId = async (req: AuthenticatedRequest): Promise<string> => {
   // If user has canteenId in token/profile, return it
@@ -13,7 +14,7 @@ const getStaffCanteenId = async (req: AuthenticatedRequest): Promise<string> => 
   // If admin, they can pass ?canteenId in query
   if (req.user?.role === Role.ADMIN && req.query.canteenId) {
     const c = await prisma.canteen.findFirst({
-      where: { OR: [{ id: String(req.query.canteenId) }, { code: String(req.query.canteenId) }] },
+      where: canteenWhere(String(req.query.canteenId)),
     });
     if (c) return c.id;
   }
