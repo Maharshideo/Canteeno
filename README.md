@@ -1,82 +1,165 @@
 # Canteeno 🍔☕
 
-> College food ordering and counter pickup management platform designed to eliminate canteen lines across campus.
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Campus%20Food%20Ordering-orange?style=for-the-badge&logo=fastapi" alt="Platform" />
+  <img src="https://img.shields.io/badge/Node.js-v20+-green?style=for-the-badge&logo=node.js" alt="Node.js" />
+  <img src="https://img.shields.io/badge/TypeScript-Strict-blue?style=for-the-badge&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/MongoDB-ReplicaSet-brightgreen?style=for-the-badge&logo=mongodb" alt="MongoDB" />
+  <img src="https://img.shields.io/badge/Prisma-ORM-darkblue?style=for-the-badge&logo=prisma" alt="Prisma" />
+  <img src="https://img.shields.io/badge/Socket.IO-Realtime-black?style=for-the-badge&logo=socket.io" alt="Socket.IO" />
+</p>
 
-Canteeno is a production-grade full-stack platform built with modern technologies. It connects campus dining outlets with students and kitchen staff through real-time order workflows, live preparation tracking, and automated counter pickup notifications.
+> **Canteeno** is a college food ordering and counter pickup management platform engineered to eliminate canteen queues across campus. Built with a production-grade decoupled architecture featuring real-time WebSocket order tracking, dynamic queue-aware prep time estimations, server-side tamper-proof price verification, and multi-tenant canteen role-based access control.
+
+---
+
+## 📑 Table of Contents
+
+- [Architectural Overview](#-architectural-overview)
+- [Key Features](#-key-features)
+  - [Student Portal](#-student-experience)
+  - [Kitchen Staff Operations](#-canteen-staff-portal)
+  - [Campus Platform Admin](#-platform-administration)
+- [Smart ETA Engine](#-smart-eta-engine)
+- [Tech Stack & Engineering Design](#-tech-stack)
+- [Project Directory Structure](#-project-directory-structure)
+- [Getting Started & Local Setup](#-getting-started)
+- [Demo Credentials](#-pre-seeded-demo-accounts)
+- [REST API Specification](#-rest-api-specification)
+- [Real-Time Socket Events](#-real-time-socket-events)
+- [Security & Production Hardening](#-security--production-hardening)
+- [Contributing & License](#-contributing)
+
+---
+
+## 🏗️ Architectural Overview
+
+```
+                      ┌──────────────────────────────────────────┐
+                      │             React 19 Frontend            │
+                      │   (TanStack Start + Router + Tailwind)   │
+                      └─────────────────┬────────────────────────┘
+                                        │
+                         HTTP REST      │  WebSocket (ws://)
+                     (Bearer JWT Auth)  │  (Bi-directional)
+                                        │
+                      ┌─────────────────▼────────────────────────┐
+                      │           Express.js Gateway             │
+                      │   Helmet · Rate Limiting · Zod Guard    │
+                      └─────────────────┬────────────────────────┘
+                                        │
+             ┌──────────────────────────┼──────────────────────────┐
+             │                          │                          │
+  ┌──────────▼──────────┐    ┌──────────▼──────────┐    ┌──────────▼──────────┐
+  │  Order State Engine │    │   Smart ETA Queue   │    │  Socket Room Broker │
+  │  (MongoDB Session)  │    │ (Weighted Avg + QA) │    │  (Tenant Isolation) │
+  └──────────┬──────────┘    └──────────┬──────────┘    └──────────┬──────────┘
+             │                          │                          │
+             └──────────────────────────┼──────────────────────────┘
+                                        │
+                      ┌─────────────────▼────────────────────────┐
+                      │           Prisma ORM Client              │
+                      │    (Transactions & Strict Validation)    │
+                      └─────────────────┬────────────────────────┘
+                                        │
+                      ┌─────────────────▼────────────────────────┐
+                      │    MongoDB Replica Set Database (rs0)    │
+                      │    14 Canteens · 465 Foods · Orders      │
+                      └──────────────────────────────────────────┘
+```
 
 ---
 
 ## 🌟 Key Features
 
 ### 🎓 Student Experience
-- **Campus Canteen Directory**: Explore 14 campus outlets (Nescafe, Annapurna, Hostel canteens A–K, Amba, LHC Canteen, Surya) with live open/closed status, prep time indicators, and dietary filters.
-- **Dynamic Menus & Ordering**: Browse snacks, full thalis, Maggi combos, beverages, and desserts. Cart validation restricts orders to one canteen at a time.
-- **Counter Pickup Scheduling**: Choose "ASAP" or pick an upcoming pickup time slot. Free counter pickup (no delivery module).
-- **Live Real-Time Order Tracking**: Order stages update dynamically in the UI through WebSockets (Socket.IO):
-  `Placed` ➔ `Accepted` ➔ `Preparing` ➔ `Ready for Pickup` ➔ `Collected`.
-- **Order History & Quick Reorder**: View past orders and 1-tap reorder.
-- **Ratings & Reviews**: Share meal ratings and reviews for campus outlets.
-- **Notifications**: Instant alerts when orders are accepted, kitchen begins cooking, or counter is ready.
+- **14 Campus Outlets**: Nescafe, Annapurna Canteen, Hostel A–K Canteens, Amba, LHC Canteen, and Surya with live operational statuses and verified menus.
+- **Smart Queue-Aware ETA**: View intelligent wait-time predictions calculated dynamically from historical completed orders and live kitchen queues before placing orders.
+- **Strict Cart Isolation**: Single-canteen cart constraints prevent cross-outlet fulfillment conflicts.
+- **Counter Pickup Scheduling**: Select **ASAP** or reserve upcoming 15-minute pickup intervals throughout the day.
+- **Real-Time Order Lifecycle**: Live status progression updates instantaneously via Socket.IO:
+  $$\text{PLACED} \longrightarrow \text{ACCEPTED} \longrightarrow \text{PREPARING} \longrightarrow \text{READY FOR PICKUP} \longrightarrow \text{COLLECTED}$$
+- **Favorites & Instant Reorder**: Save preferred snacks and reorder completed meals in a single tap.
+- **Meal Reviews**: Submit star ratings and written reviews directly linked to verified orders.
 
 ### 👨‍🍳 Canteen Staff Portal
-- **Live Kitchen Queue**: Real-time incoming order bell and queue view.
-- **Kitchen Actions**: 1-click order state transitions (Accept, Reject with reason, Mark Preparing, Mark Ready, Mark Collected).
-- **Dynamic Prep Time Adjustment**: Update preparation estimates based on kitchen workload.
-- **Menu Management**: Add new items, edit pricing, toggle availability ("In Stock" / "Out of Stock" / "Hidden").
-- **Outlet Operations**: Toggle outlet open status and order acceptance.
-- **Analytics**: Real-time summary of today's collected orders, revenue, and top-selling food items.
+- **Incoming Order Bell**: Real-time acoustic alerts and instant visual updates when new student orders arrive.
+- **Kitchen Flow Controls**: 1-click status transitions (Accept, Reject with reason, Mark Preparing, Mark Ready, Mark Collected).
+- **Stock & Menu Control**: Toggle instant item stock status (`inStock: true/false`), hide seasonal items, and edit pricing on the fly.
+- **Workload Buffer Override**: Manually adjust prep time estimates if kitchen equipment or peak rushes experience unexpected bottlenecks.
+- **Shift Analytics**: Review real-time sales revenue, average kitchen prep times, and order volume for the current day.
 
 ### 🛡️ Platform Administration
-- **Campus Overview**: System-wide statistics for users, active orders, total revenue, and outlet performance.
-- **Outlet CRUD**: Add, update, or remove canteens and adjust opening hours.
-- **Category Control**: Organize campus food categories.
-- **Student User Management**: Monitor registered students and toggle account status (`active` / `suspended`).
-- **Review Moderation**: Moderate student reviews and post staff replies.
-- **Platform Settings**: Campus-wide ordering toggles, max active orders limit, and counter hold window configuration.
+- **Campus Metrics**: High-level platform telemetry tracking daily volume, active users, total platform turnover, and individual outlet throughput.
+- **Outlet Lifecycle CRUD**: Provision new dining spots, update opening hours, edit contact details, and manage canteen assignments.
+- **Menu Category Manager**: Reorder, add, or deprecate campus-wide food categories.
+- **User Governance**: Inspect registered students and toggle account suspension flags to prevent abuse.
+- **Review Moderation**: Approve or remove flagged reviews and monitor student feedback trends.
+- **Global Platform Controls**: Toggle campus-wide emergency ordering pauses, configure maximum active orders per student (default 3), and set pickup hold grace windows.
+
+---
+
+## ⏱️ Smart ETA Engine
+
+Canteeno does not rely on static dummy wait times. It incorporates a dual-tier dynamic queue algorithm:
+
+$$\text{ETA} = \max\left(5, \; \min\left(90, \; \bar{T}_{\text{historical}} + (Q_{\text{active}} \times W_{\text{penalty}})\right)\right)$$
+
+Where:
+- $\bar{T}_{\text{historical}}$ is the recency-weighted average duration (minutes) elapsed between `placed` and `ready` events across completed orders in the last 14 days at that specific outlet.
+- $Q_{\text{active}}$ is the count of orders currently in `PENDING`, `ACCEPTED`, or `PREPARING` state at that canteen.
+- $W_{\text{penalty}}$ is the dynamically calibrated per-order kitchen queue penalty ($2.5\text{ min/order}$).
+- Confidence score (`high`, `medium`, `low`, `none`) is explicitly surfaced to students alongside sample size transparently.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Backend**: Node.js, Express.js, TypeScript
-- **Database**: MongoDB with Prisma ORM
-- **Authentication**: JWT (JSON Web Tokens), bcrypt password hashing, role-based authorization middleware
-- **Real-Time Communication**: Socket.IO with authenticated channels and room-based isolation
-- **Request Validation**: Zod schemas for all request bodies, params, and queries
-- **Security**: Helmet HTTP headers, CORS origin verification, express-rate-limit protection
-- **Frontend**: React 19, TanStack Start, TanStack Router, Tailwind CSS v4, Lucide Icons, Radix UI, Zustand
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Backend Runtime** | Node.js v20+ & TypeScript | High-performance asynchronous non-blocking event loop |
+| **API Framework** | Express.js | Structured routing, middleware pipelines, error interception |
+| **ORM & Database** | Prisma ORM & MongoDB (rs0) | Type-safe schema validation, document indexing, replica transactions |
+| **Real-Time Layer** | Socket.IO | Low-latency bi-directional state broadcast with authenticated rooms |
+| **Authentication** | JWT & bcrypt | Stateless token-based access with secure credential salting |
+| **Validation** | Zod | Runtime input parsing and schema verification for requests |
+| **Frontend Framework** | React 19 & TanStack Start | Modern SSR/CSR hybrid routing and client state hydration |
+| **Styling & Icons** | Tailwind CSS v4 & Lucide Icons | Responsive mobile-first design system |
+| **Client Store** | Zustand | Persistent client cache with real-time socket subscription hooks |
 
 ---
 
-## 🏗️ Architecture & Project Structure
+## 📂 Project Directory Structure
 
 ```
 canteeno/
-├── package.json              # Monorepo root scripts
-├── .gitignore
+├── README.md                      # Comprehensive platform guide
+├── RESEARCH.md                    # In-depth architectural & system design research
+├── package.json                   # Root workspace scripts
+├── .env.example                   # Master environment configuration template
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma     # MongoDB schema definition
-│   │   └── seed.ts           # Demo seed data for all 14 canteens & accounts
+│   │   ├── schema.prisma          # Prisma MongoDB models (User, Canteen, FoodItem, Order, etc.)
+│   │   └── seed.ts                # Production seed script (14 canteens, 465 food items)
 │   ├── src/
-│   │   ├── config/           # Database singleton, Zod environment validation
-│   │   ├── controllers/      # Auth, Canteen, Food, Order, Staff, Admin controllers
-│   │   ├── middleware/       # Auth JWT, Role RBAC, Rate limiters, Error handler
-│   │   ├── routes/           # Express REST endpoints
-│   │   ├── services/         # Order state engine, Socket.IO server, Notifications
-│   │   ├── utils/            # Order number generator, prep calculator, response helpers
-│   │   ├── validators/       # Zod input schemas
-│   │   ├── app.ts            # Express application setup
-│   │   └── server.ts         # HTTP & Socket.IO server entrypoint
+│   │   ├── config/                # Database singleton, environment parsing (Zod)
+│   │   ├── controllers/           # REST business logic controllers
+│   │   ├── middleware/            # JWT auth, RBAC permissions, rate limiting, error handler
+│   │   ├── routes/                # Express router modular definitions
+│   │   ├── services/              # Order state engine, Socket.IO broker, notifications
+│   │   ├── utils/                 # Historical ETA math, food formatters, response helpers
+│   │   ├── validators/            # Request body Zod schemas
+│   │   ├── app.ts                 # Express middleware configuration
+│   │   └── server.ts              # HTTP & Socket.IO initialization
 │   ├── tsconfig.json
 │   └── package.json
 └── frontend/
     ├── src/
-    │   ├── components/       # Radix UI, Canteeno cards, dialogs, drawers, layout
-    │   ├── lib/              # API client, Socket.IO client, order logic, types
-    │   ├── routes/           # TanStack file-based routes for Student, Staff, Admin
-    │   ├── store/            # Zustand app-store integrated with real backend & sockets
-    │   └── assets/           # Campus food & canteen visual assets
+    │   ├── components/            # UI components (Radix primitives, food cards, dialogs)
+    │   ├── lib/                   # API client, WebSocket singleton, order domain logic
+    │   ├── routes/                # TanStack Router file-based pages (Student, Staff, Admin)
+    │   ├── store/                 # Zustand state machine synced with backend API
+    │   └── assets/                # Optimized campus outlet imagery
     ├── vite.config.ts
     ├── tsconfig.json
     └── package.json
@@ -87,10 +170,18 @@ canteeno/
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js >= 20.x
-- MongoDB (Running locally on `mongodb://127.0.0.1:27017` or MongoDB Atlas replica set)
+- **Node.js** >= 20.x
+- **npm** >= 10.x
+- **MongoDB** >= 6.x / 8.x configured with replica set (required for Prisma transactions)
 
-### 1. Backend Setup
+### 1. Database Setup (Replica Set)
+Prisma requires a replica set on MongoDB. You can start a local instance via mongod:
+```bash
+mongod --port 27018 --dbpath "./mongo-data" --replSet rs0 --bind_ip 127.0.0.1
+```
+*(On first startup, run `mongosh --port 27018 --eval "rs.initiate()"` in your terminal to initialize `rs0`)*.
+
+### 2. Backend Installation & Seeding
 
 ```bash
 cd backend
@@ -98,116 +189,149 @@ cd backend
 # Install dependencies
 npm install
 
-# Configure environment
+# Setup environment variables
 cp .env.example .env
 
-# Generate Prisma client and sync database schema
+# Generate Prisma client and push schema to MongoDB
 npm run prisma:generate
 npm run prisma:db:push
 
-# Seed initial campus canteens, menus, categories & test accounts
+# Seed demo outlets, food catalog and role accounts
 npm run db:seed
 
-# Start backend server in development mode
+# Compile and start backend development server
 npm run dev
 ```
+Backend will be listening on `http://localhost:5000`.
 
-The backend server runs at `http://localhost:5000`.
-
-### 2. Frontend Setup
+### 3. Frontend Installation & Launch
 
 ```bash
-cd frontend
+cd ../frontend
 
 # Install dependencies
 npm install
 
-# Start Vite dev server
+# Setup environment variables
+cp .env.example .env
+
+# Start Vite client development server
 npm run dev
 ```
-
-The frontend application runs at `http://localhost:3000`.
+Frontend will be listening on `http://localhost:3000`.
 
 ---
 
-## 🔑 Demo Accounts (Pre-Seeded)
+## 🔑 Pre-Seeded Demo Accounts
 
-| Role | Email | Password | Access |
+| Role | Email | Password | Assigned Scope |
 |---|---|---|---|
-| **Student** | `aarav@campus.edu` | `demo1234` | Full Student food ordering & pickup |
-| **Student** | `diya@campus.edu` | `demo1234` | Student food ordering & pickup |
-| **Staff** | `staff.nescafe@campus.edu` | `staff1234` | Nescafe Kitchen Dashboard |
-| **Staff** | `staff.annapurna@campus.edu` | `staff1234` | Annapurna Kitchen Dashboard |
-| **Staff** | `staff.amba@campus.edu` | `staff1234` | Amba Kitchen Dashboard |
-| **Admin** | `admin@campus.edu` | `admin1234` | Campus Admin & Outlet Management |
+| **Student** | `aarav@campus.edu` | `demo1234` | Student food ordering, cart, ETA & pickup |
+| **Student** | `diya@campus.edu` | `demo1234` | Student food ordering & meal reviews |
+| **Staff (Nescafe)** | `staff.nescafe@campus.edu` | `staff1234` | Nescafe Kitchen Order Queue & Stock |
+| **Staff (Annapurna)** | `staff.annapurna@campus.edu` | `staff1234` | Annapurna Dining Kitchen & Menu |
+| **Staff (Amba)** | `staff.amba@campus.edu` | `staff1234` | Amba Kitchen Order Queue & Stock |
+| **Platform Admin** | `admin@campus.edu` | `admin1234` | Full Campus Governance & Outlets |
 
-*Note: You can also use the 1-click demo login buttons directly on the login screen.*
+*Tip: Quick 1-click demo logins are available on the login page for effortless evaluation.*
 
 ---
 
-## 📡 REST API Reference
+## 📡 REST API Specification
 
-### Student Endpoints
-- `POST /api/auth/register` — Register new campus student
-- `POST /api/auth/login` — Sign in and obtain JWT access token
-- `GET /api/auth/me` — Current user profile
-- `PATCH /api/auth/profile` — Update student profile
-- `POST /api/auth/favourites/food/:id` — Toggle food item favourite
-- `POST /api/auth/favourites/canteen/:id` — Toggle canteen favourite
-- `GET /api/canteens` — List all campus canteens
-- `GET /api/canteens/:id` — Outlet details
-- `GET /api/canteens/:id/menu` — Outlet live food menu
-- `GET /api/food` — Food catalog with filters (vegOnly, search, category)
-- `GET /api/food/:id` — Food item details
-- `GET /api/categories` — Food categories
-- `POST /api/orders` — Place counter pickup order (validates server-side)
-- `GET /api/orders/my-orders` — Student order history
-- `GET /api/orders/:id` — Live status of specific order
-- `POST /api/orders/:id/cancel` — Cancel pending order
-- `POST /api/reviews` — Submit outlet review
-- `GET /api/notifications` — Student notification list
+### Student APIs
+- `POST /api/auth/register` — Register student account
+- `POST /api/auth/login` — Authenticate and receive JWT token
+- `GET /api/auth/me` — Retrieve signed-in student profile
+- `PATCH /api/auth/profile` — Update hostel/phone profile details
+- `POST /api/auth/favourites/food/:id` — Toggle food item favorite
+- `POST /api/auth/favourites/canteen/:id` — Toggle canteen favorite
+- `GET /api/canteens` — List all campus canteens (`?openOnly=true`)
+- `GET /api/canteens/:id` — Get canteen profile by ObjectId or short code
+- `GET /api/canteens/:id/menu` — Retrieve active food menu for canteen
+- `GET /api/canteens/:id/eta` — Calculate live queue-aware estimated wait time
+- `GET /api/food` — Filter food catalog by search query, veg status, category
+- `GET /api/food/:id` — Single food item details
+- `GET /api/categories` — Campus category listings
+- `POST /api/orders` — Submit pickup order (server validates item prices & stock)
+- `GET /api/orders/my-orders` — Student personal order history
+- `GET /api/orders/:id` — Order status and milestone timestamps
+- `POST /api/orders/:id/cancel` — Cancel pending order before kitchen acceptance
+- `POST /api/reviews` — Post star rating and feedback
+- `GET /api/notifications` — Retrieve student in-app notifications
 - `PATCH /api/notifications/:id/read` — Mark notification read
 
-### Staff Endpoints
-- `GET /api/staff/dashboard` — Live kitchen stats & incoming orders
-- `GET /api/staff/orders` — All orders for the staff member's canteen
-- `PATCH /api/staff/orders/:id/accept` — Accept order
-- `PATCH /api/staff/orders/:id/reject` — Reject order with reason
-- `PATCH /api/staff/orders/:id/preparing` — Mark in-kitchen preparation
-- `PATCH /api/staff/orders/:id/ready` — Mark ready for counter pickup
-- `PATCH /api/staff/orders/:id/collected` — Mark collected
-- `PATCH /api/staff/orders/:id/prep-time` — Adjust preparation estimate
-- `POST /api/staff/food` — Create food item
-- `PUT /api/staff/food/:id` — Update food item
-- `DELETE /api/staff/food/:id` — Delete food item
-- `PATCH /api/staff/food/:id/availability` — Toggle item stock / visibility
-- `PATCH /api/staff/canteen/status` — Toggle canteen open / order acceptance
-- `GET /api/staff/analytics` — Outlet sales and revenue analytics
+### Staff APIs
+- `GET /api/staff/dashboard` — Live kitchen stats, active count, revenue summary
+- `GET /api/staff/orders` — Orders ledger for the staff member's outlet
+- `PATCH /api/staff/orders/:id/accept` — Accept pending order
+- `PATCH /api/staff/orders/:id/reject` — Reject incoming order with explanation
+- `PATCH /api/staff/orders/:id/preparing` — Move order to kitchen cooking stage
+- `PATCH /api/staff/orders/:id/ready` — Mark order ready at counter for pickup
+- `PATCH /api/staff/orders/:id/collected` — Finalize order upon counter collection
+- `PATCH /api/staff/orders/:id/prep-time` — Manually override estimated prep minutes
+- `POST /api/staff/food` — Create new menu food item
+- `PUT /api/staff/food/:id` — Update existing food item details & price
+- `DELETE /api/staff/food/:id` — Remove food item from menu
+- `PATCH /api/staff/food/:id/availability` — Toggle `inStock` / `isAvailable` status
+- `PATCH /api/staff/canteen/status` — Toggle outlet open status and order reception
+- `GET /api/staff/analytics` — Outlet daily performance analysis
 
-### Admin Endpoints
-- `GET /api/admin/dashboard` — Campus-wide stats & analytics
-- `GET /api/admin/users` — List registered students
-- `PATCH /api/admin/users/:id/status` — Suspend or activate user
-- `GET /api/admin/canteens` — Manage all outlets
-- `POST /api/admin/canteens` — Create new canteen
-- `PUT /api/admin/canteens/:id` — Update canteen
-- `DELETE /api/admin/canteens/:id` — Remove canteen
-- `GET /api/admin/orders` — System-wide order ledger
-- `GET /api/admin/reviews` — Moderation review feed
-- `PATCH /api/admin/reviews/:id` — Update review status
-- `GET /api/admin/categories` — Manage food categories
-- `POST /api/admin/categories` — Create category
-- `PUT /api/admin/categories/:id` — Update category
-- `DELETE /api/admin/categories/:id` — Delete category
-- `GET /api/admin/settings` — Platform settings
-- `PATCH /api/admin/settings` — Update platform settings
-- `GET /api/admin/analytics` — Revenue breakdown across outlets
+### Admin APIs
+- `GET /api/admin/dashboard` — Campus-wide order and revenue telemetry
+- `GET /api/admin/users` — List registered campus users
+- `PATCH /api/admin/users/:id/status` — Suspend or reactivate student account
+- `GET /api/admin/canteens` — List all outlets
+- `POST /api/admin/canteens` — Create new campus dining outlet
+- `PUT /api/admin/canteens/:id` — Update outlet operational specs
+- `DELETE /api/admin/canteens/:id` — Remove dining outlet
+- `GET /api/admin/orders` — Master campus order history
+- `GET /api/admin/reviews` — Review moderation stream
+- `PATCH /api/admin/reviews/:id` — Moderate review status (`published`/`flagged`/`hidden`)
+- `GET /api/admin/settings` — Read platform runtime settings
+- `PATCH /api/admin/settings` — Update platform runtime limits and emergency pause
 
 ---
 
-## 🔒 Security Measures
-- **Password Protection**: Salted password hashing with bcrypt.
-- **Strict Role-Based Access Control**: Route-level middleware ensures students, staff, and administrators can only execute authorized operations.
-- **Multi-Tenant Outlet Isolation**: Canteen staff cannot view or alter orders belonging to other canteens.
-- **Tamper-Proof Order Valuation**: Total amounts, item availability, and active limits are strictly computed and verified on the server.
-- **Rate Limiting**: Brute-force protection on authentication and public API endpoints.
+## ⚡ Real-Time Socket Events
+
+Socket.IO connections are authenticated with JWT tokens upon handshake and isolated into tenant rooms:
+- `user:<userId>`: Individual room for student status alerts.
+- `canteen:<canteenId>`: Private kitchen room for authorized outlet staff.
+- `order:<orderId>`: Dedicated live order tracker channel.
+
+| Event Name | Direction | Payload | Description |
+|---|---|---|---|
+| `order:new` | Server $\rightarrow$ Staff | `FormattedOrder` | Emitted immediately when a student places a new order |
+| `order:status_updated` | Server $\rightarrow$ Both | `FormattedOrder` | Emitted when order transitions between stages |
+| `notification:new` | Server $\rightarrow$ Student | `Notification` | Emitted for counter alerts and kitchen updates |
+
+---
+
+## 🛡️ Security & Production Hardening
+
+1. **Server-Authoritative Pricing**: The client cart submits only food item IDs and quantities. The backend fetches active items directly from MongoDB, verifies availability and stock, and computes subtotals and totals on the server.
+2. **Cross-Tenant Guarding**: Staff authorization middleware verifies that incoming operations match the caller's assigned canteen ID, blocking unauthorized access to competing outlets.
+3. **State Transition Finite State Machine**: Order status changes strictly adhere to allowable paths; orders cannot transition out of terminal states (`COLLECTED`, `REJECTED`, `CANCELLED`).
+4. **Defensive MongoDB Lookup Guards**: Safe ObjectId validation prevents MongoDB BSON malformed hex string crashes when querying human-readable slugs.
+5. **Rate Limiting & Headers**: Configured with Helmet HTTP security headers, CORS origin whitelisting, and IP-based rate limiting on sensitive authentication routes.
+
+---
+
+## 🤝 Contributing
+
+Contributions, bug reports, and suggestions are welcome! Please open an issue or pull request on GitHub.
+
+```bash
+# Branch convention
+git checkout -b feature/your-feature-name
+
+# Commit convention
+git commit -m "feat: description of changes"
+```
+
+---
+
+<p align="center">
+  <b>Canteeno</b> — Engineered for seamless campus dining.
+</p>
